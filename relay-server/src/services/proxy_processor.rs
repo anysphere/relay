@@ -109,8 +109,11 @@ impl ProxyProcessorService {
                 // forward; any failure is counted in statsd and never affects the upstream send.
                 #[cfg(feature = "fanout-http")]
                 if let Some(handle) = self.addrs.fanout_http.as_ref() {
-                    let item_types: smallvec::SmallVec<[ItemType; 4]> =
-                        envelope.envelope().items().map(|i| i.ty().clone()).collect();
+                    let item_types: smallvec::SmallVec<[ItemType; 4]> = envelope
+                        .envelope()
+                        .items()
+                        .map(|i| i.ty().clone())
+                        .collect();
                     if handle.should_send(body.len(), &item_types) {
                         handle.dispatch(FanoutEnvelope {
                             body: body.clone(),

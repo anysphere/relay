@@ -70,7 +70,10 @@ impl FanoutHttpHandle {
     /// - the random sample rejects this envelope.
     pub fn should_send(&self, body_len: usize, item_types: &[ItemType]) -> bool {
         if body_len > self.max_body_bytes {
-            metric!(counter(RelayCounters::FanoutHttpDropped) += 1, reason = "too_large");
+            metric!(
+                counter(RelayCounters::FanoutHttpDropped) += 1,
+                reason = "too_large"
+            );
             return false;
         }
 
@@ -79,14 +82,20 @@ impl FanoutHttpHandle {
                 .iter()
                 .any(|ty| allow.iter().any(|a| a == ty.as_str()))
         {
-            metric!(counter(RelayCounters::FanoutHttpDropped) += 1, reason = "item_type");
+            metric!(
+                counter(RelayCounters::FanoutHttpDropped) += 1,
+                reason = "item_type"
+            );
             return false;
         }
 
         if self.sample_rate < 1.0 {
             // For sample_rate <= 0.0 we always drop without consuming RNG.
             if self.sample_rate <= 0.0 || rand::random::<f32>() >= self.sample_rate {
-                metric!(counter(RelayCounters::FanoutHttpDropped) += 1, reason = "sampled");
+                metric!(
+                    counter(RelayCounters::FanoutHttpDropped) += 1,
+                    reason = "sampled"
+                );
                 return false;
             }
         }
@@ -110,11 +119,17 @@ impl FanoutHttpHandle {
                 metric!(counter(RelayCounters::FanoutHttpSent) += 1);
             }
             Err(mpsc::error::TrySendError::Full(_)) => {
-                metric!(counter(RelayCounters::FanoutHttpDropped) += 1, reason = "queue_full");
+                metric!(
+                    counter(RelayCounters::FanoutHttpDropped) += 1,
+                    reason = "queue_full"
+                );
             }
             Err(mpsc::error::TrySendError::Closed(_)) => {
                 // Worker task has stopped. We can't usefully recover; treat as a drop.
-                metric!(counter(RelayCounters::FanoutHttpDropped) += 1, reason = "closed");
+                metric!(
+                    counter(RelayCounters::FanoutHttpDropped) += 1,
+                    reason = "closed"
+                );
             }
         }
     }
@@ -267,7 +282,10 @@ async fn send_one(client: reqwest::Client, cfg: Arc<WorkerConfig>, envelope: Fan
 
     match result {
         Ok(resp) if resp.status().is_success() => {
-            metric!(timer(RelayTimers::FanoutHttpRequest) = elapsed, outcome = "ok");
+            metric!(
+                timer(RelayTimers::FanoutHttpRequest) = elapsed,
+                outcome = "ok"
+            );
             relay_log::trace!(
                 bytes = body_len,
                 status = resp.status().as_u16(),
@@ -281,8 +299,14 @@ async fn send_one(client: reqwest::Client, cfg: Arc<WorkerConfig>, envelope: Fan
             } else {
                 "status_5xx"
             };
-            metric!(timer(RelayTimers::FanoutHttpRequest) = elapsed, outcome = outcome);
-            metric!(counter(RelayCounters::FanoutHttpFailed) += 1, reason = outcome);
+            metric!(
+                timer(RelayTimers::FanoutHttpRequest) = elapsed,
+                outcome = outcome
+            );
+            metric!(
+                counter(RelayCounters::FanoutHttpFailed) += 1,
+                reason = outcome
+            );
             relay_log::debug!(status = status.as_u16(), "fanout http rejected");
         }
         Err(err) => {
@@ -291,8 +315,14 @@ async fn send_one(client: reqwest::Client, cfg: Arc<WorkerConfig>, envelope: Fan
             } else {
                 "transport"
             };
-            metric!(timer(RelayTimers::FanoutHttpRequest) = elapsed, outcome = outcome);
-            metric!(counter(RelayCounters::FanoutHttpFailed) += 1, reason = outcome);
+            metric!(
+                timer(RelayTimers::FanoutHttpRequest) = elapsed,
+                outcome = outcome
+            );
+            metric!(
+                counter(RelayCounters::FanoutHttpFailed) += 1,
+                reason = outcome
+            );
             relay_log::debug!(
                 error = &err as &dyn std::error::Error,
                 "fanout http transport failure"
@@ -300,4 +330,3 @@ async fn send_one(client: reqwest::Client, cfg: Arc<WorkerConfig>, envelope: Fan
         }
     }
 }
-

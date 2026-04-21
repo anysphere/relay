@@ -1877,8 +1877,11 @@ impl EnvelopeProcessorService {
                 #[cfg(feature = "fanout-http")]
                 if let Some(handle) = self.inner.addrs.fanout_http.as_ref() {
                     use crate::services::fanout_http::FanoutEnvelope;
-                    let item_types: smallvec::SmallVec<[ItemType; 4]> =
-                        envelope.envelope().items().map(|i| i.ty().clone()).collect();
+                    let item_types: smallvec::SmallVec<[ItemType; 4]> = envelope
+                        .envelope()
+                        .items()
+                        .map(|i| i.ty().clone())
+                        .collect();
                     if handle.should_send(body.len(), &item_types) {
                         handle.dispatch(FanoutEnvelope {
                             body: body.clone(),
