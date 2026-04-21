@@ -34,6 +34,13 @@ RUN apt-get update \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
+# relay-system uses tokio's unstable RuntimeMetrics (`worker_steal_operations`
+# etc.) which are only exposed when the crate graph is built with `--cfg
+# tokio_unstable`. Upstream relies on `.cargo/config.toml` for this, but that
+# directory is blocked by `.dockerignore`; set it explicitly here so the
+# requirement is visible at build time.
+ENV RUSTFLAGS="--cfg tokio_unstable"
+
 WORKDIR /build
 
 # Copy the entire workspace. We rely on `.dockerignore` to keep the context
