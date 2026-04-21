@@ -8,6 +8,7 @@
 
 !relay*/
 !tools/
+!migrations/
 !Cargo.toml
 !Cargo.lock
 
