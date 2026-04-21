@@ -68,11 +68,8 @@ jobs:
         run: cargo fmt --all -- --check
 
       - name: cargo clippy
-        run: |
-          cargo clippy \
-            --workspace --all-targets --no-deps \
-            --features relay-server/fanout-http \
-            -- -D warnings
+        # `fanout-http` is on by default for this fork (see relay-server/Cargo.toml).
+        run: cargo clippy --workspace --all-targets --no-deps -- -D warnings
 
   test:
     name: Test
@@ -100,7 +97,8 @@ jobs:
             ${{ runner.os }}-relay-cargo-test-
 
       - name: cargo test
-        run: cargo test --workspace --features relay-server/fanout-http --locked
+        # `fanout-http` is on by default for this fork (see relay-server/Cargo.toml).
+        run: cargo test --workspace --locked
 
   docker:
     name: Docker

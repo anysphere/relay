@@ -61,12 +61,13 @@ RUN set -e; \
       exit 1; \
     fi
 
-# Build a release binary with the fanout-http feature. We deliberately do NOT
-# enable `processing` (Kafka/Redis/Symbolic) in this image because the Cursor
-# deployment runs in proxy mode; that keeps the builder lean and image small.
+# Build a release binary. `fanout-http` is on by default in the fork
+# (see relay-server/Cargo.toml). We deliberately do NOT enable `processing`
+# (Kafka/Redis/Symbolic) in this image because the Cursor deployment runs
+# in proxy mode; that keeps the builder lean and image small.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/build/target \
-    cargo build --release --bin relay --features relay-server/fanout-http \
+    cargo build --release --bin relay \
     && cp target/release/relay /usr/local/bin/relay
 
 # ---- Filesystem-prep stage ----
