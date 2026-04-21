@@ -11,10 +11,12 @@ license-file = "../LICENSE.md"
 publish = false
 
 [features]
-default = []
-# Enables the fire-and-forget HTTP fanout tee. Zero new dependencies; reuses
-# the already-present `reqwest` and `tokio` primitives. When disabled (the
-# default) the tee code is compiled out completely.
+# The `fanout-http` feature is on by default in this fork. It adds a
+# fire-and-forget HTTP tee that POSTs every envelope to an internal endpoint,
+# which is how we deliver envelopes into WarpStream / ClickHouse. Zero new
+# dependencies; reuses the already-present `reqwest` and `tokio` primitives.
+# Opt out with `--no-default-features` if you really need a clean upstream build.
+default = ["fanout-http"]
 fanout-http = []
 processing = [
   "dep:minidump",
