@@ -402,7 +402,6 @@ jobs:
   build-internal:
     # Sentry-internal encrypted artifact build; requires SENTRY SSH + ENCRYPTION_KEY secrets
     # and ships artifacts to getsentry infrastructure. Skipped on non-upstream forks.
-    if: github.repository_owner == 'getsentry'
     needs: build-setup
     timeout-minutes: 30
 
@@ -418,7 +417,7 @@ jobs:
         "aarch64-unknown-linux-gnu": "ubuntu-22.04-arm"
       }')[matrix.target] }}
 
-    if: "(!startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]') || needs.build-setup.outputs.full_ci == 'true'"
+    if: "github.repository_owner == 'getsentry' && ((!startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]') || needs.build-setup.outputs.full_ci == 'true')"
 
     env:
       RUSTFLAGS:  ${{ needs.build-setup.outputs.rustflags }}
@@ -557,7 +556,6 @@ jobs:
 
   publish-to-ar-internal:
     # Pushes to Sentry's internal Google Artifact Registry. Fork-irrelevant.
-    if: github.repository_owner == 'getsentry'
     timeout-minutes: 5
     needs: [build-setup, build-internal]
 
@@ -577,7 +575,7 @@ jobs:
       AR_DOCKER_IMAGE: "us-central1-docker.pkg.dev/internal-sentry/relay/${{ matrix.image_name }}"
       REVISION: "${{ github.event.pull_request.head.sha || github.sha }}"
 
-    if: "!startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && needs.build-setup.outputs.full_ci == 'true'"
+    if: "github.repository_owner == 'getsentry' && !startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && needs.build-setup.outputs.full_ci == 'true'"
 
     steps:
       - uses: actions/checkout@v6.0.2
@@ -629,7 +627,6 @@ jobs:
 
   publish-to-gcr:
     # Pushes to Sentry's public Google Artifact Registry. Fork-irrelevant.
-    if: github.repository_owner == 'getsentry'
     timeout-minutes: 5
     needs: [build-setup, build-docker]
 
@@ -652,7 +649,8 @@ jobs:
 
     # Skip redundant checks for library releases
     # Skip for dependabot and if run on a fork
-    if: "!startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && needs.build-setup.outputs.full_ci == 'true'"
+    # Skip on non-upstream repositories (no push perms to sentryio's AR)
+    if: "github.repository_owner == 'getsentry' && !startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && needs.build-setup.outputs.full_ci == 'true'"
 
     steps:
       - name: Google Auth
@@ -682,7 +680,6 @@ jobs:
 
   gocd-artifacts:
     # Uploads deploy artifacts to Sentry's GoCD pipelines. Fork-irrelevant.
-    if: github.repository_owner == 'getsentry'
     timeout-minutes: 10
     needs: [build-setup, build-internal, publish-to-ar-internal]
 
@@ -701,7 +698,7 @@ jobs:
     env:
       REVISION: "${{ github.event.pull_request.head.sha || github.sha }}"
 
-    if: "!startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && needs.build-setup.outputs.full_ci == 'true'"
+    if: "github.repository_owner == 'getsentry' && !startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]' && needs.build-setup.outputs.full_ci == 'true'"
 
     steps:
       - name: Google Auth
@@ -834,7 +831,6 @@ jobs:
 
   sentry-relay-integration-tests:
     # Cross-repo tests against getsentry/sentry. Requires upstream image access. Fork-irrelevant.
-    if: github.repository_owner == 'getsentry'
     name: Sentry-Relay Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -844,7 +840,8 @@ jobs:
       RELAY_TEST_KEEP_CONTAINER: true
 
     # Skip redundant checks for library releases
-    if: "!startsWith(github.ref, 'refs/heads/release-library/')"
+    # Skip on non-upstream repositories (pulls images from ghcr.io/getsentry)
+    if: "github.repository_owner == 'getsentry' && !startsWith(github.ref, 'refs/heads/release-library/')"
 
     steps:
       # Checkout Sentry and run integration tests against latest Relay
