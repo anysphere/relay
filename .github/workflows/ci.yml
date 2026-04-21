@@ -179,7 +179,7 @@ jobs:
       - name: Update ECS service
         run: |
           aws ecs update-service \
-            --cluster cursor-cluster-main \
+            --cluster cursor-cluster \
             --service sentry-relay \
             --task-definition ${{ steps.register-taskdef.outputs.NEW_TASK_DEF_ARN }} \
             --force-new-deployment
