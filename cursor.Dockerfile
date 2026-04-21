@@ -34,6 +34,13 @@ RUN apt-get update \
         pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
+# relay-system uses tokio's unstable RuntimeMetrics (`worker_steal_operations`
+# etc.) which are only exposed when the crate graph is built with `--cfg
+# tokio_unstable`. Upstream relies on `.cargo/config.toml` for this, but that
+# directory is blocked by `.dockerignore`; set it explicitly here so the
+# requirement is visible at build time.
+ENV RUSTFLAGS="--cfg tokio_unstable"
+
 WORKDIR /build
 
 # Copy the entire workspace. We rely on `.dockerignore` to keep the context
@@ -43,10 +50,16 @@ COPY . .
 
 # Sanity-check that the required submodules are present. Failing fast here
 # produces a much clearer error than a mid-build "file not found" panic.
-RUN test -f relay-conventions/sentry-conventions/model/registry/general.json \
-        || (echo "ERROR: submodule relay-conventions/sentry-conventions not initialized; run 'git submodule update --init --depth 1 relay-conventions/sentry-conventions relay-ua/uap-core' on the host" >&2 && exit 1) \
-    && test -f relay-ua/uap-core/regexes.yaml \
-        || (echo "ERROR: submodule relay-ua/uap-core not initialized" >&2 && exit 1)
+RUN set -e; \
+    if [ ! -f relay-conventions/sentry-conventions/README.md ]; then \
+      echo "ERROR: submodule relay-conventions/sentry-conventions not initialized" >&2; \
+      echo "  fix on the host: git submodule update --init --depth 1 relay-conventions/sentry-conventions relay-ua/uap-core" >&2; \
+      exit 1; \
+    fi; \
+    if [ ! -f relay-ua/uap-core/regexes.yaml ]; then \
+      echo "ERROR: submodule relay-ua/uap-core not initialized" >&2; \
+      exit 1; \
+    fi
 
 # Build a release binary with the fanout-http feature. We deliberately do NOT
 # enable `processing` (Kafka/Redis/Symbolic) in this image because the Cursor

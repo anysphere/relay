@@ -111,6 +111,8 @@ pub async fn create_test_processor(config: Config) -> EnvelopeProcessorService {
             #[cfg(feature = "processing")]
             objectstore: None,
             aggregator,
+            #[cfg(feature = "fanout-http")]
+            fanout_http: None,
         },
         metric_outcomes,
     )
