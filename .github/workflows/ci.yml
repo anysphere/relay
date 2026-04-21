@@ -400,6 +400,9 @@ jobs:
           path: "./artifacts/*"
 
   build-internal:
+    # Sentry-internal encrypted artifact build; requires SENTRY SSH + ENCRYPTION_KEY secrets
+    # and ships artifacts to getsentry infrastructure. Skipped on non-upstream forks.
+    if: github.repository_owner == 'getsentry'
     needs: build-setup
     timeout-minutes: 30
 
@@ -517,7 +520,9 @@ jobs:
           merge-multiple: true
 
       - name: Build and push to ghcr.io
-        if: "!github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]'"
+        # Only push on upstream getsentry/relay. On our fork the "build and publish artifact"
+        # step below still exercises the Dockerfile without pushing.
+        if: "github.repository_owner == 'getsentry' && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]'"
         uses: getsentry/action-build-and-push-images@b172ab61a5f7eabd58bd42ce231b517e79947c01
         with:
           image_name: ${{ matrix.image_name }}
@@ -530,7 +535,8 @@ jobs:
           publish_on_pr: true
 
       - name: Build and publish docker artifact
-        if: "github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]'"
+        # Catches forks, dependabot, and anything running outside the upstream repo.
+        if: "github.repository_owner != 'getsentry' || github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]'"
         uses: getsentry/action-build-and-push-images@b172ab61a5f7eabd58bd42ce231b517e79947c01
         with:
           image_name: ${{ matrix.image_name }}
@@ -542,7 +548,7 @@ jobs:
           tags: "ghcr.io/getsentry/${{ matrix.image_name }}:${{ github.event.pull_request.head.sha || github.sha }}"
 
       - name: Upload docker image
-        if: "github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]'"
+        if: "github.repository_owner != 'getsentry' || github.event.pull_request.head.repo.fork || github.actor == 'dependabot[bot]'"
         uses: actions/upload-artifact@v7
         with:
           retention-days: 1
@@ -550,6 +556,8 @@ jobs:
           path: "${{ matrix.image_name }}-docker-image"
 
   publish-to-ar-internal:
+    # Pushes to Sentry's internal Google Artifact Registry. Fork-irrelevant.
+    if: github.repository_owner == 'getsentry'
     timeout-minutes: 5
     needs: [build-setup, build-internal]
 
@@ -620,6 +628,8 @@ jobs:
           google_service_account: gha-gcr-push@sac-prod-sa.iam.gserviceaccount.com
 
   publish-to-gcr:
+    # Pushes to Sentry's public Google Artifact Registry. Fork-irrelevant.
+    if: github.repository_owner == 'getsentry'
     timeout-minutes: 5
     needs: [build-setup, build-docker]
 
@@ -671,6 +681,8 @@ jobs:
         run: docker buildx imagetools create --tag "${AR_DOCKER_IMAGE}:nightly" "${GHCR_DOCKER_IMAGE}:nightly"
 
   gocd-artifacts:
+    # Uploads deploy artifacts to Sentry's GoCD pipelines. Fork-irrelevant.
+    if: github.repository_owner == 'getsentry'
     timeout-minutes: 10
     needs: [build-setup, build-internal, publish-to-ar-internal]
 
@@ -821,6 +833,8 @@ jobs:
           RELAY_VERSION_CHAIN: "23.12.0,latest"
 
   sentry-relay-integration-tests:
+    # Cross-repo tests against getsentry/sentry. Requires upstream image access. Fork-irrelevant.
+    if: github.repository_owner == 'getsentry'
     name: Sentry-Relay Integration Tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -883,7 +897,8 @@ jobs:
     # - Skip redundant checks for library releases
     # - Skip for dependabot or if it's a fork as the image cannot be uploaded to ghcr since this test attempts to pull
     # the image from ghcr
-    if: "!startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]'"
+    # - Skip on non-upstream repositories (needs getsentry/self-hosted + ghcr.io push access)
+    if: "github.repository_owner == 'getsentry' && !startsWith(github.ref, 'refs/heads/release-library/') && !github.event.pull_request.head.repo.fork && github.actor != 'dependabot[bot]'"
 
     steps:
       - name: Run Sentry self-hosted e2e CI
