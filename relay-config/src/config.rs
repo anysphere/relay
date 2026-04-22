@@ -264,6 +264,14 @@ pub struct OverridableConfig {
     pub shutdown_timeout: Option<String>,
     /// Server name reported in the Sentry SDK.
     pub server_name: Option<String>,
+    /// Whether the HTTP fanout tee is enabled.
+    pub fanout_enabled: Option<String>,
+    /// Target URL for the HTTP fanout tee.
+    pub fanout_url: Option<String>,
+    /// Sampling rate for the HTTP fanout tee (`[0.0, 1.0]`).
+    pub fanout_sample_rate: Option<String>,
+    /// Bearer token for the HTTP fanout tee.
+    pub fanout_auth_token: Option<String>,
 }
 
 /// The relay credentials
@@ -2026,6 +2034,22 @@ impl Config {
 
         if let Some(server_name) = overrides.server_name {
             self.values.sentry.server_name = Some(server_name.into());
+        }
+
+        let fanout = &mut self.values.fanout.http;
+        if let Some(enabled) = overrides.fanout_enabled {
+            fanout.enabled = matches!(enabled.to_lowercase().as_str(), "true" | "1");
+        }
+        if let Some(url) = overrides.fanout_url {
+            fanout.url = url;
+        }
+        if let Some(rate) = overrides.fanout_sample_rate {
+            if let Ok(r) = rate.parse::<f32>() {
+                fanout.sample_rate = r;
+            }
+        }
+        if let Some(token) = overrides.fanout_auth_token {
+            fanout.header_auth = Some(token);
         }
 
         Ok(self)
