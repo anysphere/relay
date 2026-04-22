@@ -2043,10 +2043,10 @@ impl Config {
         if let Some(url) = overrides.fanout_url {
             fanout.url = url;
         }
-        if let Some(rate) = overrides.fanout_sample_rate {
-            if let Ok(r) = rate.parse::<f32>() {
-                fanout.sample_rate = r;
-            }
+        if let Some(rate) = overrides.fanout_sample_rate
+            && let Ok(r) = rate.parse::<f32>()
+        {
+            fanout.sample_rate = r;
         }
         if let Some(token) = overrides.fanout_auth_token {
             fanout.header_auth = Some(token);
