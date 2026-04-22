@@ -104,6 +104,10 @@ pub fn extract_config_args(matches: &ArgMatches) -> OverridableConfig {
         shutdown_timeout: matches.get_one("shutdown_timeout").cloned(),
         instance: matches.get_one("instance").cloned(),
         server_name: matches.get_one("server_name").cloned(),
+        fanout_enabled: None,
+        fanout_url: None,
+        fanout_sample_rate: None,
+        fanout_auth_token: None,
     }
 }
 
@@ -129,6 +133,10 @@ pub fn extract_config_env_vars() -> OverridableConfig {
         server_name: env::var("RELAY_SERVER_NAME")
             .ok()
             .or_else(|| env::var("HOSTNAME").ok()),
+        fanout_enabled: env::var("CURSOR_FANOUT_ENABLED").ok(),
+        fanout_url: env::var("CURSOR_FANOUT_URL").ok(),
+        fanout_sample_rate: env::var("CURSOR_FANOUT_SAMPLE_RATE").ok(),
+        fanout_auth_token: env::var("CURSOR_FANOUT_AUTH_TOKEN").ok(),
     }
 }
 
