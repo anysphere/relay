@@ -15,6 +15,9 @@ name: CI
 #   - test:    cargo test on the workspace (with the `fanout-http` feature)
 #   - docker:  build cursor.Dockerfile on every PR; additionally push to ECR on
 #              merges to master, tagged with the commit SHA.
+#   - deploy:  on workflow_dispatch only — registers a new ECS task definition
+#              revision with the image from the current SHA and updates the
+#              sentry-relay service on cursor-cluster.
 
 on:
   push:
@@ -142,3 +145,35 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: false
           sbom: false
+
+  deploy:
+    name: Deploy → ECS
+    needs: docker
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ secrets.AWS_RELAY_CI_ROLE }}
+          aws-region: us-east-1
+      - name: Set image URI
+        run: echo "IMAGE_URI=${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}" | tee -a "$GITHUB_ENV"
+      - name: Register new task definition revision
+        id: register-taskdef
+        run: |
+          aws ecs describe-task-definition --task-definition sentry-relay \
+            --query taskDefinition | \
+            jq 'del(.taskDefinitionArn,.revision,.status,.requiresAttributes,.compatibilities,.registeredBy,.registeredAt)' \
+              | jq --arg IMAGE "$IMAGE_URI" '.containerDefinitions[0].image = $IMAGE' \
+              > new-taskdef.json
+          NEW_ARN=$(aws ecs register-task-definition --cli-input-json file://new-taskdef.json | jq -r '.taskDefinition.taskDefinitionArn')
+          echo "NEW_TASK_DEF_ARN=$NEW_ARN" | tee -a "$GITHUB_OUTPUT"
+      - name: Update ECS service
+        run: |
+          aws ecs update-service \
+            --cluster cursor-cluster \
+            --service sentry-relay \
+            --task-definition ${{ steps.register-taskdef.outputs.NEW_TASK_DEF_ARN }} \
+            --force-new-deployment
