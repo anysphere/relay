@@ -152,11 +152,26 @@ pub fn spawn(config: &Config) -> Option<FanoutHttpHandle> {
     let max_concurrent = http.max_concurrent.max(1);
     let timeout = Duration::from_millis(http.timeout_ms);
 
-    let client = match reqwest::ClientBuilder::new()
+    let mut builder = reqwest::ClientBuilder::new()
         .connect_timeout(timeout)
-        .timeout(timeout)
-        .build()
-    {
+        .timeout(timeout);
+
+    if let Ok(pem) = std::env::var("INTERNAL_ROOT_CA_CERTIFICATE") {
+        match reqwest::Certificate::from_pem(pem.as_bytes()) {
+            Ok(cert) => {
+                builder = builder.add_root_certificate(cert);
+                relay_log::info!("fanout http: added internal root CA certificate");
+            }
+            Err(err) => {
+                relay_log::error!(
+                    error = &err as &dyn std::error::Error,
+                    "fanout http: failed to parse INTERNAL_ROOT_CA_CERTIFICATE"
+                );
+            }
+        }
+    }
+
+    let client = match builder.build() {
         Ok(c) => c,
         Err(err) => {
             relay_log::error!(
