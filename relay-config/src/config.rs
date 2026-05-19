@@ -264,6 +264,18 @@ pub struct OverridableConfig {
     pub shutdown_timeout: Option<String>,
     /// Server name reported in the Sentry SDK.
     pub server_name: Option<String>,
+    /// Address of the StatsD server for Relay metrics.
+    pub metrics_statsd: Option<String>,
+    /// Maximum payload size for metrics sent to the StatsD socket.
+    pub metrics_statsd_buffer_size: Option<String>,
+    /// Prefix added to all emitted metrics.
+    pub metrics_prefix: Option<String>,
+    /// Default tags attached to all emitted metrics as comma-separated `key=value` pairs.
+    pub metrics_default_tags: Option<String>,
+    /// Tag name under which to emit the local hostname.
+    pub metrics_hostname_tag: Option<String>,
+    /// Period in seconds for periodic internal metrics.
+    pub metrics_periodic_secs: Option<String>,
     /// Whether the HTTP fanout tee is enabled.
     pub fanout_enabled: Option<String>,
     /// Target URL for the HTTP fanout tee.
@@ -1850,6 +1862,30 @@ impl fmt::Debug for Config {
 }
 
 impl Config {
+    fn parse_metrics_default_tags(raw_tags: &str) -> anyhow::Result<BTreeMap<String, String>> {
+        let mut parsed_tags = BTreeMap::new();
+
+        for raw_tag in raw_tags.split(',') {
+            let raw_tag = raw_tag.trim();
+            if raw_tag.is_empty() {
+                continue;
+            }
+
+            let (key, value) = raw_tag
+                .split_once('=')
+                .ok_or_else(|| ConfigError::field("metrics.default_tags"))?;
+
+            let key = key.trim();
+            if key.is_empty() {
+                return Err(ConfigError::field("metrics.default_tags").into());
+            }
+
+            parsed_tags.insert(key.to_owned(), value.trim().to_owned());
+        }
+
+        Ok(parsed_tags)
+    }
+
     /// Loads a config from a given config folder.
     pub fn from_path<P: AsRef<Path>>(path: P) -> anyhow::Result<Config> {
         let path = env::current_dir()
@@ -2034,6 +2070,40 @@ impl Config {
 
         if let Some(server_name) = overrides.server_name {
             self.values.sentry.server_name = Some(server_name.into());
+        }
+
+        let metrics = &mut self.values.metrics;
+        if let Some(statsd) = overrides.metrics_statsd {
+            metrics.statsd = if statsd.is_empty() {
+                None
+            } else {
+                Some(statsd)
+            };
+        }
+        if let Some(statsd_buffer_size) = overrides.metrics_statsd_buffer_size {
+            metrics.statsd_buffer_size = Some(
+                statsd_buffer_size
+                    .parse::<usize>()
+                    .with_context(|| ConfigError::field("metrics.statsd_buffer_size"))?,
+            );
+        }
+        if let Some(prefix) = overrides.metrics_prefix {
+            metrics.prefix = prefix;
+        }
+        if let Some(default_tags) = overrides.metrics_default_tags {
+            metrics.default_tags = Self::parse_metrics_default_tags(&default_tags)?;
+        }
+        if let Some(hostname_tag) = overrides.metrics_hostname_tag {
+            metrics.hostname_tag = if hostname_tag.is_empty() {
+                None
+            } else {
+                Some(hostname_tag)
+            };
+        }
+        if let Some(periodic_secs) = overrides.metrics_periodic_secs {
+            metrics.periodic_secs = periodic_secs
+                .parse::<u64>()
+                .with_context(|| ConfigError::field("metrics.periodic_secs"))?;
         }
 
         let fanout = &mut self.values.fanout.http;
@@ -2930,5 +3000,47 @@ cache:
     #[test]
     fn test_emit_outcomes_invalid() {
         assert!(serde_json::from_str::<EmitOutcomes>("asdf").is_err());
+    }
+
+    #[test]
+    fn test_apply_override_metrics() {
+        let mut config = Config::default();
+        config
+            .apply_override(OverridableConfig {
+                metrics_statsd: Some("127.0.0.1:8125".to_owned()),
+                metrics_statsd_buffer_size: Some("2048".to_owned()),
+                metrics_prefix: Some("relay.test".to_owned()),
+                metrics_default_tags: Some("env=staging,region=us-west-2".to_owned()),
+                metrics_hostname_tag: Some("host".to_owned()),
+                metrics_periodic_secs: Some("30".to_owned()),
+                ..OverridableConfig::default()
+            })
+            .unwrap();
+
+        assert_eq!(
+            config.values.metrics.statsd.as_deref(),
+            Some("127.0.0.1:8125")
+        );
+        assert_eq!(config.values.metrics.statsd_buffer_size, Some(2048));
+        assert_eq!(config.values.metrics.prefix, "relay.test");
+        assert_eq!(
+            config.values.metrics.default_tags,
+            BTreeMap::from([
+                ("env".to_owned(), "staging".to_owned()),
+                ("region".to_owned(), "us-west-2".to_owned()),
+            ])
+        );
+        assert_eq!(config.values.metrics.hostname_tag.as_deref(), Some("host"));
+        assert_eq!(config.values.metrics.periodic_secs, 30);
+    }
+
+    #[test]
+    fn test_apply_override_metrics_default_tags_invalid() {
+        let mut config = Config::default();
+        let result = config.apply_override(OverridableConfig {
+            metrics_default_tags: Some("missing-separator".to_owned()),
+            ..OverridableConfig::default()
+        });
+        assert!(result.is_err());
     }
 }

@@ -10,6 +10,7 @@
 
 - Use `ModelMetadata` config with context size and utilization. ([#5814](https://github.com/getsentry/relay/pull/5814))
 - Handle minidump placeholders. ([#5849](https://github.com/getsentry/relay/pull/5849))
+- Allow configuring metrics options via environment variables. ([#10](https://github.com/anysphere/relay/pull/10))
 
 **Internal**:
 
