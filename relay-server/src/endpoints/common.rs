@@ -17,6 +17,11 @@ use crate::services::processor::{BucketSource, MetricData, ProcessMetrics};
 use crate::statsd::{RelayCounters, RelayDistributions};
 use crate::utils::{self, ApiErrorResponse, FormDataIter};
 
+#[cfg(feature = "fanout-http")]
+use crate::services::fanout_http::FanoutEnvelope;
+#[cfg(feature = "fanout-http")]
+use crate::services::processor::encode_payload;
+
 #[derive(Clone, Copy, Debug, thiserror::Error)]
 #[error("the service is overloaded")]
 pub struct ServiceUnavailable;
@@ -352,6 +357,26 @@ pub async fn handle_envelope(
         });
     }
 
+    // Snapshot the full envelope for the fanout tee BEFORE rate-limit shedding, so the internal
+    // fanout always captures it regardless of upstream Sentry's per-project abuse-limit (429)
+    // drops. The actual dispatch happens after `check_envelope` resolves scoping. Doing this at
+    // the endpoint (not in the processor) decouples our internal telemetry from upstream health.
+    #[cfg(feature = "fanout-http")]
+    let fanout_pending = state.fanout_http().and_then(|handle| {
+        let http_encoding = state.config().http_encoding();
+        let body = envelope
+            .to_vec()
+            .and_then(|v| {
+                encode_payload(&v.into(), http_encoding).map_err(EnvelopeError::PayloadIoFailed)
+            })
+            .ok()?;
+        let item_types: smallvec::SmallVec<[ItemType; 4]> =
+            envelope.items().map(|i| i.ty().clone()).collect();
+        handle
+            .should_send(body.len(), &item_types)
+            .then(|| (handle.clone(), body, http_encoding, item_types))
+    });
+
     let project_key = envelope.meta().public_key();
 
     let rate_limits = state
@@ -360,6 +385,20 @@ pub async fn handle_envelope(
         .check_envelope(&mut envelope)
         .await
         .map_err(|err| err.map(BadStoreRequest::EventRejected))?;
+
+    // Dispatch the pre-shed snapshot now that scoping is resolved — even when the envelope was
+    // fully shed by the rate limiter above, which is exactly the case we want to keep reporting.
+    #[cfg(feature = "fanout-http")]
+    if let Some((handle, body, content_encoding, item_types)) = fanout_pending {
+        handle.dispatch(FanoutEnvelope {
+            body,
+            content_encoding,
+            scoping: envelope.scoping(),
+            event_id,
+            received_at: envelope.received_at(),
+            item_types,
+        });
+    }
 
     if envelope.is_empty() {
         return Ok(HandledEnvelope {
