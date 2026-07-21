@@ -345,16 +345,12 @@ impl PublicKey {
     /// header.
     pub fn verify_meta(&self, data: &[u8], sig: SignatureRef<'_>) -> Option<SignatureHeader> {
         let mut iter = sig.0.splitn(2, '.');
-        let sig_bytes = match iter.next() {
-            Some(sig_encoded) => BASE64URL_NOPAD.decode(sig_encoded.as_bytes()).ok()?,
-            None => return None,
-        };
+        let sig_encoded = iter.next()?;
+        let sig_bytes = BASE64URL_NOPAD.decode(sig_encoded.as_bytes()).ok()?;
         let sig = ed25519_dalek::Signature::from_slice(&sig_bytes).ok()?;
 
-        let header = match iter.next() {
-            Some(header_encoded) => BASE64URL_NOPAD.decode(header_encoded.as_bytes()).ok()?,
-            None => return None,
-        };
+        let header_encoded = iter.next()?;
+        let header = BASE64URL_NOPAD.decode(header_encoded.as_bytes()).ok()?;
         let parsed: SignatureHeader = serde_json::from_slice(&header).ok()?;
 
         let verification_result = match parsed
