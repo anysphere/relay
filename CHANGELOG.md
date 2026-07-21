@@ -14,6 +14,7 @@
 
 **Internal**:
 
+- Fan out envelopes to the HTTP tee at the ingest endpoint before rate-limit shedding, so the internal fanout captures envelopes even when upstream rate-limits (429) them. ([#12](https://github.com/anysphere/relay/pull/12))
 - Move unreal crash report expansion from processing into endpoint. ([#5825](https://github.com/getsentry/relay/pull/5825))
 - Retry failing objectstore requests. ([#5836](https://github.com/getsentry/relay/pull/5836))
 - Add mobile normalizations to SpanV2 processing pipeline (mobile tag, main thread, outlier filtering, app start backfill from V1 transactions, device class). ([#5824](https://github.com/getsentry/relay/pull/5824))

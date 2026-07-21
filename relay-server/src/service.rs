@@ -85,6 +85,13 @@ pub struct Registry {
     pub objectstore: Option<Addr<Objectstore>>,
     pub upload: Addr<Upload>,
     pub global_config_handle: GlobalConfigHandle,
+    /// Handle for the fire-and-forget HTTP fanout tee.
+    ///
+    /// The tee runs at the ingest endpoint, before rate-limit shedding, so the internal
+    /// fanout is decoupled from upstream Sentry's abuse-limit drops. `None` when the
+    /// `fanout-http` feature is compiled in but disabled in config.
+    #[cfg(feature = "fanout-http")]
+    pub fanout_http: Option<crate::services::fanout_http::FanoutHttpHandle>,
 }
 
 /// Constructs a Tokio [`relay_system::Runtime`] configured for running [services](relay_system::Service).
@@ -263,9 +270,10 @@ impl ServiceState {
             services,
         );
 
-        // The fanout HTTP tee is spawned once and shared by both proxy and managed processors.
-        // Returns `None` when the feature is disabled in config; we then pass `None` to both
-        // addrs structs and the tee call sites compile out to no-ops.
+        // The fanout HTTP tee is spawned once and held in the registry. The tee runs at the
+        // ingest endpoint (before rate-limit shedding), not in the processor, so the internal
+        // fanout always captures envelopes regardless of upstream Sentry's abuse-limit drops.
+        // Returns `None` when the feature is disabled in config.
         #[cfg(feature = "fanout-http")]
         let fanout_http = crate::services::fanout_http::spawn(config.as_ref());
 
@@ -278,8 +286,6 @@ impl ServiceState {
                         ProxyAddrs {
                             outcome_aggregator: outcome_aggregator.clone(),
                             upstream_relay: upstream_relay.clone(),
-                            #[cfg(feature = "fanout-http")]
-                            fanout_http: fanout_http.clone(),
                         },
                     ),
                     processor_rx,
@@ -319,8 +325,6 @@ impl ServiceState {
                             #[cfg(feature = "processing")]
                             store_forwarder: store,
                             aggregator: aggregator.clone(),
-                            #[cfg(feature = "fanout-http")]
-                            fanout_http: fanout_http.clone(),
                         },
                         metric_outcomes.clone(),
                     ),
@@ -388,6 +392,8 @@ impl ServiceState {
             objectstore,
             upload,
             global_config_handle,
+            #[cfg(feature = "fanout-http")]
+            fanout_http,
         };
 
         let state = StateInner {
@@ -460,6 +466,12 @@ impl ServiceState {
     /// Returns the address of the [`OutcomeProducer`] service.
     pub fn outcome_aggregator(&self) -> &Addr<TrackOutcome> {
         &self.inner.registry.outcome_aggregator
+    }
+
+    /// Returns the fire-and-forget HTTP fanout tee handle, if enabled.
+    #[cfg(feature = "fanout-http")]
+    pub fn fanout_http(&self) -> Option<&crate::services::fanout_http::FanoutHttpHandle> {
+        self.inner.registry.fanout_http.as_ref()
     }
 
     #[cfg(feature = "processing")]

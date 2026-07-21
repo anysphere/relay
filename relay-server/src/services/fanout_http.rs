@@ -1,10 +1,11 @@
 //! Fire-and-forget HTTP fanout tee for envelopes.
 //!
-//! When enabled via `fanout.http.*` configuration, every envelope that reaches
-//! `submit_upstream` is also POSTed to a configurable HTTP endpoint in parallel with
-//! the primary upstream forward. Used at Cursor to tee envelopes into a backend
-//! endpoint that republishes them to Kafka, without re-implementing WarpStream
-//! connectivity inside Relay.
+//! When enabled via `fanout.http.*` configuration, every envelope received at the ingest
+//! endpoint is also POSTed to a configurable HTTP endpoint, in parallel with the primary
+//! upstream forward. The tee runs at the endpoint *before* rate-limit shedding, so the
+//! internal fanout captures envelopes even when upstream Sentry's per-project abuse limit
+//! (429) drops them. Used at Cursor to tee envelopes into a backend endpoint that
+//! republishes them to Kafka, without re-implementing WarpStream connectivity inside Relay.
 //!
 //! Strict guarantees:
 //!
@@ -46,7 +47,7 @@ pub struct FanoutEnvelope {
     pub item_types: SmallVec<[ItemType; 4]>,
 }
 
-/// Cheap-to-clone handle held at the `submit_upstream` call sites.
+/// Cheap-to-clone handle held in the service registry and used at the ingest endpoint.
 ///
 /// Owns the bounded mpsc sender plus the small subset of config needed to make
 /// the cheap drop decisions (sample rate, item-type allowlist, max body size)
